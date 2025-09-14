@@ -5,11 +5,9 @@
 iLQR::iLQR(RobotUtils& robot, int N, double dt) 
         : robot_(robot), N_(N), dt_(dt), reg_lambda_(1e-6),
             max_iterations_(10), tolerance_(1e-4) {
-    
-    // Pre-allocate all trajectories and matrices
+    // Set up all the storage for trajectories, gains, and derivatives
     int nx = robot_.nx();
     int nu = robot_.nu();
-    
     xbar_.resize(N_ + 1);
     ubar_.resize(N_);
     K_.resize(N_);
@@ -21,13 +19,11 @@ iLQR::iLQR(RobotUtils& robot, int N, double dt)
     lxx_.resize(N_ + 1);
     luu_.resize(N_);
     lxu_.resize(N_);
-    
     for (int t = 0; t <= N_; ++t) {
         xbar_[t] = Eigen::VectorXd::Zero(nx);
         lx_[t] = Eigen::VectorXd::Zero(nx);
         lxx_[t] = Eigen::MatrixXd::Zero(nx, nx);
     }
-    
     for (int t = 0; t < N_; ++t) {
         ubar_[t] = Eigen::VectorXd::Zero(nu);
         lu_[t] = Eigen::VectorXd::Zero(nu);
@@ -39,7 +35,6 @@ iLQR::iLQR(RobotUtils& robot, int N, double dt)
         luu_[t] = Eigen::MatrixXd::Zero(nu, nu);
         lxu_[t] = Eigen::MatrixXd::Zero(nx, nu);
     }
-    
     std::cout << "iLQR initialized with horizon N=" << N_ << ", dt=" << dt_ << std::endl;
 }
 

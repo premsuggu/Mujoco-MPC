@@ -7,62 +7,40 @@ MPC::MPC(RobotUtils& robot, int N, double dt)
         : robot_(robot), ilqr_(robot, N, dt), N_(N), dt_(dt), 
             t_idx_(0), has_prev_solution_(false),
             last_solve_cost_(0.0), last_solve_time_ms_(0.0) {
-    
-    // Pre-allocate reference windows
+    // Set up reference windows and previous solution storage
     x_ref_window_.resize(N_ + 1);
     u_ref_window_.resize(N_);
-    
-    // Initialize with zero vectors
     int nx = robot_.nx();
     int nu = robot_.nu();
-    
     for (int i = 0; i <= N_; ++i) {
         x_ref_window_[i] = Eigen::VectorXd::Zero(nx);
-    }
-    for (int i = 0; i < N_; ++i) {
-        u_ref_window_[i] = Eigen::VectorXd::Zero(nu);
-    }
-    
-    // Initialize previous solution storage
-    prev_xbar_.resize(N_ + 1);
-    prev_ubar_.resize(N_);
-    prev_K_.resize(N_);
-    
-    for (int i = 0; i <= N_; ++i) {
         prev_xbar_[i] = Eigen::VectorXd::Zero(nx);
     }
     for (int i = 0; i < N_; ++i) {
+        u_ref_window_[i] = Eigen::VectorXd::Zero(nu);
         prev_ubar_[i] = Eigen::VectorXd::Zero(nu);
         prev_K_[i] = Eigen::MatrixXd::Zero(nu, nx);
     }
-    
     std::cout << "MPC initialized with N=" << N_ << ", dt=" << dt_ << std::endl;
 }
 
 bool MPC::stepOnce(const Eigen::VectorXd& x_measured, Eigen::VectorXd& u_apply) {
     auto start_time = std::chrono::high_resolution_clock::now();
-    
     try {
-        // Extract reference window for current time index
+        // Grab the right reference window for this step
         extractReferenceWindow();
-        
-        // Initialize iLQR with improved warm start logic
+        // Warm start iLQR if we have a previous solution
         if (has_prev_solution_) {
-            // Use reference-aware initialization with warm start from previous solution
             ilqr_.initializeWithReference(x_measured, x_ref_window_, u_ref_window_, &prev_xbar_, &prev_ubar_);
         } else {
-            // Use reference-aware cold start initialization  
             ilqr_.initializeWithReference(x_measured, x_ref_window_, u_ref_window_);
         }
-        
-        // Solve multi-iteration iLQR
+        // Run iLQR
         double solve_cost;
         bool success = ilqr_.solve(x_measured, x_ref_window_, u_ref_window_, solve_cost);
-        
         if (!success) {
             std::cerr << "iLQR solve failed at time index " << t_idx_ << std::endl;
-            
-            // Fallback: use previous solution or zero control
+            // If iLQR fails, use previous control or zero
             if (has_prev_solution_) {
                 u_apply = prev_ubar_[0];
             } else {
@@ -70,40 +48,26 @@ bool MPC::stepOnce(const Eigen::VectorXd& x_measured, Eigen::VectorXd& u_apply) 
             }
             return false;
         }
-        
-        // Get current solution
+        // Compute TV-LQR control law
         const auto& xbar = ilqr_.xbar();
         const auto& ubar = ilqr_.ubar();
         const auto& K = ilqr_.gainsK();
-        
-        // Compute TV-LQR control: u = ubar[0] + K * (x_measured - xbar)
         Eigen::VectorXd x_err = x_measured - xbar[0];
         u_apply = ubar[0] + K[0] * x_err;
-
-        // Store solution for next iteration's warm start
+        // Save solution for next time
         prev_xbar_ = xbar;
         prev_ubar_ = ubar;
         prev_K_ = K;
         has_prev_solution_ = true;
-        
-        // Update statistics
         last_solve_cost_ = solve_cost;
-        
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
         last_solve_time_ms_ = duration.count() / 1000.0;
-        
-        // Advance time index
         t_idx_++;
-        
-    // Log current step (if file opened)
-    logCurrentStep(x_measured, u_apply);
-
-    // Log optimal trajectory (if enabled)
-    logAppliedOptimal(x_measured, u_apply);
-                
+        // Log what happened
+        logCurrentStep(x_measured, u_apply);
+        logAppliedOptimal(x_measured, u_apply);
         return true;
-        
     } catch (const std::exception& e) {
         std::cerr << "Exception in MPC step: " << e.what() << std::endl;
         u_apply = Eigen::VectorXd::Zero(robot_.nu());

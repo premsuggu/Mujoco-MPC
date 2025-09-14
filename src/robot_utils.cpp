@@ -1,4 +1,3 @@
-// src/robot_utils.cpp
 #include "robot_utils.hpp"
 #include <iostream>
 #include <fstream>
@@ -18,47 +17,34 @@ RobotUtils::~RobotUtils() {
 
 bool RobotUtils::loadModel(const std::string& xml_path) {
     char error[1024] = {0};
-    
-    // Load model
+    // Load the MuJoCo model from XML
     model_ = mj_loadXML(xml_path.c_str(), nullptr, error, sizeof(error));
     if (!model_) {
         std::cerr << "Failed to load model: " << error << std::endl;
         return false;
     }
-    
-    // Create data structures
+    // Set up simulation data
     data_ = mj_makeData(model_);
     data_temp_ = mj_makeData(model_);
     if (!data_ || !data_temp_) {
         std::cerr << "Failed to create MuJoCo data structures" << std::endl;
         return false;
     }
-    
-    // Set dimensions
-    // State: [qpos, qvel] (positions and velocities)
-    nx_ = model_->nq + model_->nv;  // Position coords + velocity coords
-    nu_ = model_->nu;               // Number of actuators
+    // Figure out state and control dimensions
+    nx_ = model_->nq + model_->nv;
+    nu_ = model_->nu;
     dt_ = model_->opt.timestep;
-    
     std::cout << "Model loaded successfully:" << std::endl;
-    /* std::cout << "  nq (positions): " << model_->nq << std::endl;
-    std::cout << "  nv (velocities): " << model_->nv << std::endl;
-    std::cout << "  nu (controls): " << model_->nu << std::endl;
-    std::cout << "  nx (state dim): " << nx_ << std::endl;
-    std::cout << "  timestep: " << dt_ << std::endl; */
-    
-    // Build joint name mapping
+    // Build a map from joint names to IDs
     buildJointNameMap();
-    
-    // Initialize cost matrices (will be set later)
+    // Set up default cost matrices
     Q_ = Eigen::MatrixXd::Identity(nx_, nx_);
     R_ = Eigen::MatrixXd::Identity(nu_, nu_);
     Qf_ = Eigen::MatrixXd::Identity(nx_, nx_);
-
-    
     return true;
 }
 
+// Tweak MuJoCo's contact solver for better stability
 void RobotUtils::setContactImpratio(double impratio) {
     if (model_) {
         model_->opt.impratio = impratio;
@@ -66,6 +52,7 @@ void RobotUtils::setContactImpratio(double impratio) {
     }
 }
 
+// Change the simulation timestep
 void RobotUtils::setTimeStep(double dt) {
     dt_ = dt;
     if (model_) {
@@ -74,6 +61,7 @@ void RobotUtils::setTimeStep(double dt) {
     }
 }
 
+// Set the robot's state (positions and velocities)
 void RobotUtils::setState(const Eigen::VectorXd& x) {
     if (!data_ || x.size() != nx_) {
         std::cerr << "Invalid state size: " << x.size() << " (expected " << nx_ << ")" << std::endl;
@@ -82,12 +70,14 @@ void RobotUtils::setState(const Eigen::VectorXd& x) {
     unpackState(x);
 }
 
+// Get the robot's current state
 void RobotUtils::getState(Eigen::VectorXd& x) const {
     if (!data_) return;
     x.resize(nx_);
     packState(x);
 }
 
+// Set the robot's control input (actuator commands)
 void RobotUtils::setControl(const Eigen::VectorXd& u) {
     if (!data_ || u.size() != nu_) {
         std::cerr << "Invalid control size: " << u.size() << " (expected " << nu_ << ")" << std::endl;
@@ -96,6 +86,7 @@ void RobotUtils::setControl(const Eigen::VectorXd& u) {
     unpackControl(u);
 }
 
+// Advance the simulation by one step
 void RobotUtils::step() {
     if (!model_ || !data_) return;
     mj_step(model_, data_);
@@ -119,27 +110,18 @@ void RobotUtils::step() {
     mj_copyData(data_, model_, data_temp_);
 } */
 
+// Predict the next state given x and u, using a separate data buffer
 void RobotUtils::rolloutOneStep(const Eigen::VectorXd& x, const Eigen::VectorXd& u,
                                Eigen::VectorXd& x_next) {
     if (!model_ || !data_temp_) return;
-    
-    // Use separate data for rollout predictions
-    mj_copyData(data_temp_, model_, data_); // Save current state
-    
-    // Set state in temporary data
+    // Save current state, do prediction in temp buffer
+    mj_copyData(data_temp_, model_, data_);
     unpackStateToData(x, data_temp_);
     unpackControlToData(u, data_temp_);
-    
-    // CRITICAL: Recompute contacts after manual state setting
     mj_forward(model_, data_temp_);
-    
-    // Step forward in temporary data
     mj_step(model_, data_temp_);
-    
-    // Extract result from temporary data
     packStateFromData(x_next, data_temp_);
-    
-    // Don't restore - let main simulation continue naturally
+    // No need to restore original state
 }
 
 
