@@ -11,7 +11,7 @@ int main() {
     // --- Simulation setup ---
     const double dt = 0.02;          // MPC runs at 50Hz
     const int N = 25;                // 0.5s prediction horizon
-    const int sim_steps = 50;        // Simulate for 4 seconds
+    const int sim_steps = 50;        // Simulate for 1 second
     const double physics_dt = 0.02;  // Physics engine step size
 
     // Fire up the robot model
@@ -24,7 +24,7 @@ int main() {
     // Tweak simulation parameters for stability and match the paper
     robot.setContactImpratio(100.0);
     robot.setTimeStep(physics_dt);
-    robot.setGravity(0.0, 0.0, -0.0025); // Basically zero gravity
+    robot.setGravity(0.0, 0.0, -9.81);            // Small gravity to stabilize the motion
     // robot.scaleRobotMass(0.3); // Uncomment to make the robot featherweight
 
     // Start in a nice, stable standing pose
@@ -143,6 +143,7 @@ int main() {
                       << " | Control range: [" << u_min << ", " << u_max << "]"
                       << std::endl;
             // robot.diagnoseContactForces();
+            robot.debugContactSolver();
         }
     }
 

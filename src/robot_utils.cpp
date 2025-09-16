@@ -388,12 +388,12 @@ void RobotUtils::initializeStandingPose() {
     }
     
     // Improve numerical stability
-    // model_->opt.solver = mjSOL_PGS;         // Use more stable PGS solver
-    model_->opt.cone = mjCONE_PYRAMIDAL;    // Friction cone
+    // model_->opt.solver = mjSOL_PGS;      // Projected Gauss-Seidel (fast, less accurate)
+    model_->opt.cone = mjCONE_ELLIPTIC;     // Elliptic cone (more accurate)
     model_->opt.jacobian = mjJAC_SPARSE;    // Sparse Jacobian
     model_->opt.solver = mjSOL_NEWTON;      // Newton solver for hard contacts
     model_->opt.iterations = 500;           // More solver iterations
-    model_->opt.tolerance = 1e-6;           // Tighter tolerance
+    model_->opt.tolerance = 1e-8;           // Tighter tolerance
     
     // Forward kinematics to compute dependent quantities
     mj_forward(model_, data_);
@@ -620,7 +620,7 @@ void RobotUtils::constraintHessians(const Eigen::VectorXd& x, const Eigen::Vecto
 }
 
 
-// EXTRAS
+// DEBUG
 void RobotUtils::diagnoseContactForces() const {
     if (!model_ || !data_) return;
     
@@ -658,6 +658,17 @@ void RobotUtils::diagnoseContactForces() const {
     std::cout << "Force ratio: " << (total_vertical_force / required_force) << std::endl;
 }
 
+void RobotUtils::debugContactSolver() {
+    std::cout << "Solver iterations used: " << data_->solver_iter << std::endl;
+    if (data_->solver_iter > 0) {
+        const mjSolverStat& stat = data_->solver[data_->solver_iter - 1];
+        std::cout << "Solver improvement: " << stat.improvement
+                  << " gradient: " << stat.gradient << std::endl;
+    }
+    std::cout << "Contact solver time (total): " << data_->timer[mjTIMER_CONSTRAINT].duration << std::endl;
+}
+
+// Utility Functions
 void RobotUtils::setGravity(double gx, double gy, double gz) {
     if (model_) {
         model_->opt.gravity[0] = gx;  // X gravity

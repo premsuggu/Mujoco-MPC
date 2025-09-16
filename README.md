@@ -39,7 +39,7 @@
 - The code is meant to be readable and hackable—experiment away!
 
 ## Requirements
-- MuJoCo (and license)
+- MuJoCo
 - Eigen
 - CMake
 - Python 3 (for plotting/visualization)

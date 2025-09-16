@@ -10,6 +10,9 @@ MPC::MPC(RobotUtils& robot, int N, double dt)
     // Set up reference windows and previous solution storage
     x_ref_window_.resize(N_ + 1);
     u_ref_window_.resize(N_);
+    prev_xbar_.resize(N_ + 1);
+    prev_ubar_.resize(N_);
+    prev_K_.resize(N_);
     int nx = robot_.nx();
     int nu = robot_.nu();
     for (int i = 0; i <= N_; ++i) {

@@ -77,15 +77,15 @@ public:
     int jointId(const std::string& name) const;
     void resetToReference(int t);
     void initializeStandingPose();
-    
 
-    // EXTRAS
-    void diagnoseContactForces() const;
     mjModel* model() const { return model_; }
     mjData* data() const { return data_; }
     void setGravity(double gx = 0.0, double gy = 0.0, double gz = 0.0);
     void scaleRobotMass(double scale_factor);
 
+    // DEBUG
+    void diagnoseContactForces() const;
+    void debugContactSolver();
 private:
     // MuJoCo model and data
     mjModel* model_;
